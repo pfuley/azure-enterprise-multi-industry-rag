@@ -37,6 +37,7 @@ def chunk_to_search_document(chunk: Chunk) -> dict:
         "content": chunk.content,
         "file_name": chunk.file_name,
         "chunk_index": chunk.chunk_index,
+        "page_number": chunk.page_number,
         "industry": chunk.metadata.get("industry"),
         "department": chunk.metadata.get("department"),
         "document_type": chunk.metadata.get("document_type"),

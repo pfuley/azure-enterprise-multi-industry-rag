@@ -81,6 +81,7 @@ def vector_search(
         filter=search_filter,
         select=[
             "chunk_id",
+            "page_number",
             "content",
             "file_name",
             "chunk_index",
@@ -95,6 +96,7 @@ def vector_search(
     return [
         {
             "chunk_id": result["chunk_id"],
+            "page_number": result["page_number"],
             "content": result["content"],
             "file_name": result["file_name"],
             "chunk_index": result["chunk_index"],
@@ -139,6 +141,7 @@ def hybrid_search(
         filter=search_filter,
         select=[
             "chunk_id",
+            "page_number",
             "content",
             "file_name",
             "chunk_index",
@@ -153,6 +156,7 @@ def hybrid_search(
     return [
         {
             "chunk_id": result["chunk_id"],
+            "page_number": result["page_number"],
             "content": result["content"],
             "file_name": result["file_name"],
             "chunk_index": result["chunk_index"],
@@ -199,6 +203,7 @@ def semantic_hybrid_search(
         semantic_configuration_name="semantic-config",
         select=[
             "chunk_id",
+            "page_number",
             "content",
             "file_name",
             "chunk_index",
@@ -213,6 +218,7 @@ def semantic_hybrid_search(
     return [
         {
             "chunk_id": result["chunk_id"],
+            "page_number": result["page_number"],
             "content": result["content"],
             "file_name": result["file_name"],
             "chunk_index": result["chunk_index"],

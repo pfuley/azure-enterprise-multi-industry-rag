@@ -326,6 +326,11 @@ Building the pipeline from scratch has demonstrated several important RAG concep
 - [x] Azure OpenAI answer generation
 - [x] Grounded responses
 - [x] Basic source citations
+- [x] PDF parsing
+- [x] Page-aware chunking
+- [x] Page metadata
+- [x] Page-aware source citations
+- [x] Generic multi-industry ingestion pipeline
 - [ ] Real multi-industry document sets
 - [ ] Improved document parsing
 - [ ] Token/structure-aware chunking

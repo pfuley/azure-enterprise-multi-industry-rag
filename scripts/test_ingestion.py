@@ -1,35 +1,17 @@
-from src.ingestion.loader import load_text_file
-from src.ingestion.parser import parse_document
-from src.ingestion.chunker import chunk_document
-from src.ingestion.metadata import enrich_chunk_metadata
-from src.ingestion.embeddings import embed_chunk
-from src.search.uploader import upload_chunks
+from src.ingestion.industry_config import IndustryConfig
+from src.ingestion.pipeline import ingest_document
 
 
-file_path = "data/sample.txt"
-
-content = load_text_file(file_path)
-
-document = parse_document(
-    file_path,
-    content,
+config = IndustryConfig(
+    industry="it-support",
+    department="service-desk",
+    document_type="knowledge-article",
+    classification="internal",
 )
 
-chunks = chunk_document(
-    document,
-    chunk_size=500,
-    overlap=100,
+chunks_uploaded = ingest_document(
+    file_path="data/it-support/sample.txt",
+    config=config,
 )
 
-for chunk in chunks:
-    enrich_chunk_metadata(
-        chunk,
-        industry="it-support",
-        department="service-desk",
-        document_type="knowledge-article",
-        classification="internal",
-    )
-
-    embed_chunk(chunk)
-
-upload_chunks(chunks)
+print(f"Completed ingestion. Uploaded {chunks_uploaded} chunks.")

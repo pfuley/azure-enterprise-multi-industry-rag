@@ -65,6 +65,12 @@ def build_index_schema() -> SearchIndex:
         ),
 
         SimpleField(
+            name="page_number",
+            type=SearchFieldDataType.Int32,
+            filterable=True,
+        ),
+
+        SimpleField(
             name="industry",
             type=SearchFieldDataType.String,
             filterable=True,
