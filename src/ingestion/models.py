@@ -15,3 +15,4 @@ class Chunk:
     content: str
     chunk_index: int
     metadata: dict = field(default_factory=dict)
+    embedding: list[float] | None = None

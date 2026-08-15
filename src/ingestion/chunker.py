@@ -1,6 +1,5 @@
 from src.ingestion.models import Document, Chunk
 
-
 def chunk_document(
     document: Document,
     chunk_size: int = 500,
@@ -21,13 +20,15 @@ def chunk_document(
     start = 0
     chunk_index = 0
 
+    safe_file_name = document.file_name.replace(".", "_")
+
     while start < len(document.content):
         end = start + chunk_size
 
         chunk_text = document.content[start:end]
 
         chunk = Chunk(
-            chunk_id=f"{document.file_name}-{chunk_index}",
+            chunk_id=f"{safe_file_name}-{chunk_index}",
             file_name=document.file_name,
             content=chunk_text,
             chunk_index=chunk_index,
