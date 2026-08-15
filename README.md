@@ -331,9 +331,11 @@ Building the pipeline from scratch has demonstrated several important RAG concep
 - [x] Page metadata
 - [x] Page-aware source citations
 - [x] Generic multi-industry ingestion pipeline
+- [x] Token-aware chunking
+- [x] Sentence-aware chunk boundaries
+- [x] Sentence overlap
 - [ ] Real multi-industry document sets
 - [ ] Improved document parsing
-- [ ] Token/structure-aware chunking
 - [ ] Authentication and authorization
 - [ ] Document-level access control
 - [ ] Guardrails

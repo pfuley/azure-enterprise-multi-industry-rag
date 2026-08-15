@@ -2,3 +2,4 @@ python-dotenv
 openai
 azure-search-documents
 pypdf
+tiktoken
