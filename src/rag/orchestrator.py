@@ -39,10 +39,18 @@ def answer_question(
             "AZURE_OPENAI_CHAT_DEPLOYMENT is not configured"
         )
 
+    # -----------------------------------------
+    # 1. Rewrite conversational question
+    # -----------------------------------------
+
     search_query = rewrite_query(
         question=question,
         conversation_history=conversation_history,
     )
+
+    # -----------------------------------------
+    # 2. Retrieve relevant knowledge
+    # -----------------------------------------
 
     search_results = semantic_hybrid_search(
         query=search_query,
@@ -52,6 +60,10 @@ def answer_question(
         classification=classification,
     )
 
+    # -----------------------------------------
+    # 3. Stop if retrieval returned nothing
+    # -----------------------------------------
+
     if not search_results:
         return {
             "answer": (
@@ -60,9 +72,30 @@ def answer_question(
             ),
             "sources": [],
             "search_query": search_query,
+            "retrieval_trace": [],
         }
 
+    # -----------------------------------------
+    # 4. Build grounding context
+    # -----------------------------------------
+
     context = build_context(search_results)
+
+    # -----------------------------------------
+    # 5. Prepare recent conversation context
+    # -----------------------------------------
+
+    history_text = ""
+
+    if conversation_history:
+        history_text = "\n".join(
+            f"{message['role']}: {message['content']}"
+            for message in conversation_history
+        )
+
+    # -----------------------------------------
+    # 6. Generate grounded answer
+    # -----------------------------------------
 
     client = create_chat_client()
 
@@ -73,15 +106,25 @@ You are an enterprise knowledge assistant.
 
 Answer the user's question using only the supplied knowledge-base context.
 
+The conversation history is provided only to understand the conversational
+context of the user's latest question. It must not be treated as an
+authoritative source of enterprise information.
+
 Rules:
+- Use only the supplied knowledge-base context for factual claims.
 - Do not use outside knowledge.
 - Do not invent information.
-- If the supplied context does not contain enough information, say so.
+- Do not treat previous assistant responses as authoritative evidence.
+- If the knowledge-base context does not contain enough information, say so.
 - Keep the answer concise and factual.
-- Cite supporting sources using [SOURCE: filename, Page X] when page information is available.
+- Cite supporting sources using [SOURCE: filename, Page X] when page
+  information is available.
 - If page information is unavailable, cite using [SOURCE: filename].
 """.strip(),
         input=f"""
+CONVERSATION HISTORY:
+{history_text or "No previous conversation."}
+
 USER QUESTION:
 {question}
 
@@ -92,6 +135,10 @@ KNOWLEDGE BASE CONTEXT:
 {context}
 """.strip(),
     )
+
+    # -----------------------------------------
+    # 7. Build structured source list
+    # -----------------------------------------
 
     sources = []
 
@@ -105,8 +152,32 @@ KNOWLEDGE BASE CONTEXT:
         if source not in sources:
             sources.append(source)
 
+    # -----------------------------------------
+    # 8. Build retrieval diagnostic trace
+    # -----------------------------------------
+
+    retrieval_trace = []
+
+    for result in search_results:
+        retrieval_trace.append(
+            {
+                "chunk_id": result["chunk_id"],
+                "file_name": result["file_name"],
+                "page_number": result.get("page_number"),
+                "search_score": result.get("score"),
+                "reranker_score": result.get(
+                    "reranker_score"
+                ),
+            }
+        )
+
+    # -----------------------------------------
+    # 9. Return complete RAG result
+    # -----------------------------------------
+
     return {
         "answer": response.output_text,
         "sources": sources,
         "search_query": search_query,
+        "retrieval_trace": retrieval_trace,
     }
