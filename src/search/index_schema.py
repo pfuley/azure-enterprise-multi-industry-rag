@@ -106,6 +106,22 @@ def build_index_schema() -> SearchIndex:
             vector_search_dimensions=VECTOR_DIMENSIONS,
             vector_search_profile_name="vector-profile",
         ),
+
+        SearchField(
+            name="allowed_groups",
+            type=SearchFieldDataType.Collection(
+                SearchFieldDataType.String
+            ),
+            filterable=True,
+        ),
+
+        SearchField(
+            name="allowed_roles",
+            type=SearchFieldDataType.Collection(
+                SearchFieldDataType.String
+            ),
+            filterable=True,
+        ),
     ]
 
     vector_search = VectorSearch(

@@ -42,6 +42,8 @@ def chunk_to_search_document(chunk: Chunk) -> dict:
         "department": chunk.metadata.get("department"),
         "document_type": chunk.metadata.get("document_type"),
         "classification": chunk.metadata.get("classification"),
+        "allowed_groups": chunk.allowed_groups,
+        "allowed_roles": chunk.allowed_roles,
         "embedding": chunk.embedding,
     }
 

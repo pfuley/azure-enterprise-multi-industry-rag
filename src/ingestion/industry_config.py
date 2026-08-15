@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -7,3 +7,11 @@ class IndustryConfig:
     department: str
     document_type: str
     classification: str = "internal"
+
+    allowed_groups: list[str] = field(
+        default_factory=list
+    )
+
+    allowed_roles: list[str] = field(
+        default_factory=list
+    )

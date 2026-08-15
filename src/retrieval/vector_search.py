@@ -8,6 +8,8 @@ from src.core.config import (
     AZURE_SEARCH_INDEX_NAME,
 )
 from src.ingestion.embeddings import generate_embedding
+from src.security.authorization import AuthorizationContext
+from src.security.filters import build_authorization_filter
 
 
 def create_search_client() -> SearchClient:
@@ -32,21 +34,54 @@ def build_filter(
     department: str | None = None,
     classification: str | None = None,
 ) -> str | None:
+    """
+    Legacy metadata filter used by the vector/hybrid test functions.
+
+    The secured semantic RAG path uses AuthorizationContext instead.
+    """
     filters = []
 
     if industry:
-        filters.append(f"industry eq '{industry}'")
+        filters.append(
+            f"industry eq '{industry.replace(chr(39), chr(39) * 2)}'"
+        )
 
     if department:
-        filters.append(f"department eq '{department}'")
+        filters.append(
+            f"department eq '{department.replace(chr(39), chr(39) * 2)}'"
+        )
 
     if classification:
-        filters.append(f"classification eq '{classification}'")
+        filters.append(
+            f"classification eq "
+            f"'{classification.replace(chr(39), chr(39) * 2)}'"
+        )
 
     if not filters:
         return None
 
     return " and ".join(filters)
+
+
+def _format_results(results) -> list[dict]:
+    return [
+        {
+            "chunk_id": result["chunk_id"],
+            "content": result["content"],
+            "file_name": result["file_name"],
+            "chunk_index": result["chunk_index"],
+            "page_number": result.get("page_number"),
+            "industry": result["industry"],
+            "department": result["department"],
+            "document_type": result["document_type"],
+            "classification": result["classification"],
+            "score": result["@search.score"],
+            "reranker_score": result.get(
+                "@search.reranker_score"
+            ),
+        }
+        for result in results
+    ]
 
 
 def vector_search(
@@ -81,10 +116,10 @@ def vector_search(
         filter=search_filter,
         select=[
             "chunk_id",
-            "page_number",
             "content",
             "file_name",
             "chunk_index",
+            "page_number",
             "industry",
             "department",
             "document_type",
@@ -93,21 +128,8 @@ def vector_search(
         top=top_k,
     )
 
-    return [
-        {
-            "chunk_id": result["chunk_id"],
-            "page_number": result["page_number"],
-            "content": result["content"],
-            "file_name": result["file_name"],
-            "chunk_index": result["chunk_index"],
-            "industry": result["industry"],
-            "department": result["department"],
-            "document_type": result["document_type"],
-            "classification": result["classification"],
-            "score": result["@search.score"],
-        }
-        for result in results
-    ]
+    return _format_results(results)
+
 
 def hybrid_search(
     query: str,
@@ -141,10 +163,10 @@ def hybrid_search(
         filter=search_filter,
         select=[
             "chunk_id",
-            "page_number",
             "content",
             "file_name",
             "chunk_index",
+            "page_number",
             "industry",
             "department",
             "document_type",
@@ -153,28 +175,13 @@ def hybrid_search(
         top=top_k,
     )
 
-    return [
-        {
-            "chunk_id": result["chunk_id"],
-            "page_number": result["page_number"],
-            "content": result["content"],
-            "file_name": result["file_name"],
-            "chunk_index": result["chunk_index"],
-            "industry": result["industry"],
-            "department": result["department"],
-            "document_type": result["document_type"],
-            "classification": result["classification"],
-            "score": result["@search.score"],
-        }
-        for result in results
-    ]
+    return _format_results(results)
+
 
 def semantic_hybrid_search(
     query: str,
     top_k: int = 3,
-    industry: str | None = None,
-    department: str | None = None,
-    classification: str | None = None,
+    auth: AuthorizationContext | None = None,
 ) -> list[dict]:
     if not query.strip():
         raise ValueError("Search query cannot be empty")
@@ -187,10 +194,10 @@ def semantic_hybrid_search(
         fields="embedding",
     )
 
-    search_filter = build_filter(
-        industry=industry,
-        department=department,
-        classification=classification,
+    search_filter = (
+        build_authorization_filter(auth)
+        if auth
+        else None
     )
 
     client = create_search_client()
@@ -203,31 +210,18 @@ def semantic_hybrid_search(
         semantic_configuration_name="semantic-config",
         select=[
             "chunk_id",
-            "page_number",
             "content",
             "file_name",
             "chunk_index",
+            "page_number",
             "industry",
             "department",
             "document_type",
             "classification",
+            "allowed_groups",
+            "allowed_roles",
         ],
         top=top_k,
     )
 
-    return [
-        {
-            "chunk_id": result["chunk_id"],
-            "page_number": result["page_number"],
-            "content": result["content"],
-            "file_name": result["file_name"],
-            "chunk_index": result["chunk_index"],
-            "industry": result["industry"],
-            "department": result["department"],
-            "document_type": result["document_type"],
-            "classification": result["classification"],
-            "score": result["@search.score"],
-            "reranker_score": result.get("@search.reranker_score"),
-        }
-        for result in results
-    ]
+    return _format_results(results)

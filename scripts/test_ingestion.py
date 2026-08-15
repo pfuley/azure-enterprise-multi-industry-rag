@@ -7,6 +7,13 @@ config = IndustryConfig(
     department="service-desk",
     document_type="knowledge-article",
     classification="internal",
+    allowed_groups=[
+        "service-desk",
+        "it-admins",
+    ],
+    allowed_roles=[
+        "employee",
+    ],
 )
 
 chunks_uploaded = ingest_document(
@@ -14,4 +21,7 @@ chunks_uploaded = ingest_document(
     config=config,
 )
 
-print(f"Completed ingestion. Uploaded {chunks_uploaded} chunks.")
+print(
+    f"Completed ingestion. "
+    f"Uploaded {chunks_uploaded} chunks."
+)

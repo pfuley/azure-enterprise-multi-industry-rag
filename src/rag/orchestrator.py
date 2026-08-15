@@ -8,26 +8,32 @@ from src.core.config import (
 from src.rag.context_builder import build_context
 from src.rag.query_rewriter import rewrite_query
 from src.retrieval.vector_search import semantic_hybrid_search
+from src.security.authorization import AuthorizationContext
 
 
 def create_chat_client() -> OpenAI:
     if not AZURE_OPENAI_ENDPOINT:
-        raise ValueError("AZURE_OPENAI_ENDPOINT is not configured")
+        raise ValueError(
+            "AZURE_OPENAI_ENDPOINT is not configured"
+        )
 
     if not AZURE_OPENAI_API_KEY:
-        raise ValueError("AZURE_OPENAI_API_KEY is not configured")
+        raise ValueError(
+            "AZURE_OPENAI_API_KEY is not configured"
+        )
 
     return OpenAI(
         api_key=AZURE_OPENAI_API_KEY,
-        base_url=f"{AZURE_OPENAI_ENDPOINT.rstrip('/')}/openai/v1/",
+        base_url=(
+            f"{AZURE_OPENAI_ENDPOINT.rstrip('/')}"
+            "/openai/v1/"
+        ),
     )
 
 
 def answer_question(
     question: str,
-    industry: str,
-    department: str | None = None,
-    classification: str | None = None,
+    auth: AuthorizationContext,
     top_k: int = 3,
     conversation_history: list[dict] | None = None,
 ) -> dict:
@@ -36,7 +42,8 @@ def answer_question(
 
     if not AZURE_OPENAI_CHAT_DEPLOYMENT:
         raise ValueError(
-            "AZURE_OPENAI_CHAT_DEPLOYMENT is not configured"
+            "AZURE_OPENAI_CHAT_DEPLOYMENT "
+            "is not configured"
         )
 
     # -----------------------------------------
@@ -49,26 +56,30 @@ def answer_question(
     )
 
     # -----------------------------------------
-    # 2. Retrieve relevant knowledge
+    # 2. Secure retrieval
+    #
+    # AuthorizationContext determines which
+    # chunks Azure AI Search is allowed to
+    # return.
     # -----------------------------------------
 
     search_results = semantic_hybrid_search(
         query=search_query,
         top_k=top_k,
-        industry=industry,
-        department=department,
-        classification=classification,
+        auth=auth,
     )
 
     # -----------------------------------------
-    # 3. Stop if retrieval returned nothing
+    # 3. Stop if authorised retrieval
+    # returned nothing
     # -----------------------------------------
 
     if not search_results:
         return {
             "answer": (
-                "I could not find sufficient information in the "
-                "authorised knowledge base to answer this question."
+                "I could not find sufficient information "
+                "in the authorised knowledge base to "
+                "answer this question."
             ),
             "sources": [],
             "search_query": search_query,
@@ -79,17 +90,22 @@ def answer_question(
     # 4. Build grounding context
     # -----------------------------------------
 
-    context = build_context(search_results)
+    context = build_context(
+        search_results
+    )
 
     # -----------------------------------------
-    # 5. Prepare recent conversation context
+    # 5. Prepare conversation context
     # -----------------------------------------
 
     history_text = ""
 
     if conversation_history:
         history_text = "\n".join(
-            f"{message['role']}: {message['content']}"
+            (
+                f"{message['role']}: "
+                f"{message['content']}"
+            )
             for message in conversation_history
         )
 
@@ -104,22 +120,27 @@ def answer_question(
         instructions="""
 You are an enterprise knowledge assistant.
 
-Answer the user's question using only the supplied knowledge-base context.
+Answer the user's question using only the supplied
+knowledge-base context.
 
-The conversation history is provided only to understand the conversational
-context of the user's latest question. It must not be treated as an
-authoritative source of enterprise information.
+The conversation history is provided only to understand
+the conversational context of the user's latest question.
+It must not be treated as an authoritative source of
+enterprise information.
 
 Rules:
 - Use only the supplied knowledge-base context for factual claims.
 - Do not use outside knowledge.
 - Do not invent information.
 - Do not treat previous assistant responses as authoritative evidence.
-- If the knowledge-base context does not contain enough information, say so.
+- If the knowledge-base context does not contain enough information,
+  say so.
 - Keep the answer concise and factual.
-- Cite supporting sources using [SOURCE: filename, Page X] when page
-  information is available.
-- If page information is unavailable, cite using [SOURCE: filename].
+- Cite supporting sources using
+  [SOURCE: filename, Page X]
+  when page information is available.
+- If page information is unavailable, cite using
+  [SOURCE: filename].
 """.strip(),
         input=f"""
 CONVERSATION HISTORY:
@@ -145,7 +166,9 @@ KNOWLEDGE BASE CONTEXT:
     for result in search_results:
         source = {
             "file_name": result["file_name"],
-            "page_number": result.get("page_number"),
+            "page_number": result.get(
+                "page_number"
+            ),
             "chunk_id": result["chunk_id"],
         }
 
@@ -153,7 +176,7 @@ KNOWLEDGE BASE CONTEXT:
             sources.append(source)
 
     # -----------------------------------------
-    # 8. Build retrieval diagnostic trace
+    # 8. Build retrieval diagnostics
     # -----------------------------------------
 
     retrieval_trace = []
@@ -163,8 +186,12 @@ KNOWLEDGE BASE CONTEXT:
             {
                 "chunk_id": result["chunk_id"],
                 "file_name": result["file_name"],
-                "page_number": result.get("page_number"),
-                "search_score": result.get("score"),
+                "page_number": result.get(
+                    "page_number"
+                ),
+                "search_score": result.get(
+                    "score"
+                ),
                 "reranker_score": result.get(
                     "reranker_score"
                 ),
@@ -172,7 +199,7 @@ KNOWLEDGE BASE CONTEXT:
         )
 
     # -----------------------------------------
-    # 9. Return complete RAG result
+    # 9. Return RAG result
     # -----------------------------------------
 
     return {

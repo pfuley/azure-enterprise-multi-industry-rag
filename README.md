@@ -2,9 +2,9 @@
 
 A production-oriented, multi-industry **Retrieval-Augmented Generation (RAG)** platform built from scratch using **Python, Azure OpenAI, and Azure AI Search**.
 
-The purpose of this project is to understand how an enterprise RAG system works at every layer rather than relying on a pre-built framework. The project is being developed incrementally so that ingestion, retrieval, generation, conversation management, security, evaluation, observability, and deployment can be understood and debugged independently.
+The purpose of this project is to understand how an enterprise RAG system works at every layer rather than relying on a pre-built RAG framework.
 
-The architecture is designed to support multiple industry knowledge domains using the same RAG platform.
+The project is being developed incrementally so ingestion, retrieval, generation, conversation management, security, observability, evaluation, and deployment can be understood and debugged independently.
 
 ---
 
@@ -12,9 +12,9 @@ The architecture is designed to support multiple industry knowledge domains usin
 
 This project is independently implemented from scratch for learning and portfolio purposes.
 
-Microsoft's **Azure Search OpenAI Demo** is being used as a reference for studying production Azure RAG architecture and comparing design decisions.
+Microsoft's **Azure Search OpenAI Demo** is used as an architectural reference for understanding production Azure RAG patterns and comparing design decisions.
 
-Reference:
+Reference repository:
 
 https://github.com/Azure-Samples/azure-search-openai-demo
 
@@ -22,9 +22,7 @@ The Microsoft repository itself is not included in this repository.
 
 ---
 
-# Architecture
-
-The system currently contains four major pipelines:
+# Current Architecture
 
 ```text
                          DOCUMENT INGESTION
@@ -32,118 +30,109 @@ The system currently contains four major pipelines:
 Documents
    │
    ▼
-File Type Detection
+File Detection / Parsing
    │
    ├──────────────┐
    ▼              ▼
  TXT             PDF
    │              │
-Text Loader    PDF Parser
-   │              │
    └──────┬───────┘
           ▼
-   Document Model
+      Document Model
           │
           ▼
 Sentence + Token-Aware
-      Chunking
+       Chunking
           │
           ▼
-Metadata Enrichment
+    Business Metadata
+          +
+      Security ACLs
           │
           ▼
 Azure OpenAI Embeddings
           │
           ▼
-Azure AI Search Index
+    Azure AI Search
 
 
-                         RETRIEVAL
+                         SECURE RETRIEVAL
 
-User Query
-     │
-     ▼
-Query Embedding
-     │
-     ├─────────────────────┐
-     ▼                     ▼
-Keyword Search        Vector Search
-     │                     │
-     └──────────┬──────────┘
-                ▼
-        Hybrid Search / RRF
-                │
-                ▼
-        Semantic Reranking
-                │
-                ▼
-        Relevant Chunks
-
-
-                      RAG GENERATION
-
-Relevant Chunks
-      │
-      ▼
-Context Builder
-      │
-      ▼
-Grounding Context
-      │
-      +
-User Question
-      │
-      ▼
-Azure OpenAI
-      │
-      ▼
-Grounded Answer
-      +
-Source Information
+User Authorization Context
+          │
+          ▼
+Security Filter Builder
+          │
+          ▼
+      User Question
+          │
+          ▼
+      Query Embedding
+          │
+    ┌─────┴─────┐
+    ▼           ▼
+ Keyword      Vector
+ Search        Search
+    │           │
+    └─────┬─────┘
+          ▼
+         RRF
+          │
+          ▼
+ Semantic Reranking
+          │
+          ▼
+ Authorised Chunks Only
 
 
-                    CONVERSATIONAL RAG
+                      CONVERSATIONAL RAG
 
-User Question
-      │
-      +
 Conversation History
-      │
-      ▼
-Query Rewriting
-      │
-      ▼
+        +
+User Question
+        │
+        ▼
+   Query Rewriting
+        │
+        ▼
 Standalone Search Query
-      │
-      ▼
-RAG Pipeline
-      │
-      ▼
+        │
+        ▼
+Secure Retrieval
+        │
+        ▼
+Context Builder
+        │
+        ▼
+Azure OpenAI
+        │
+        ▼
 Grounded Answer
-      │
-      ▼
-Conversation Session
+        +
+Sources
+        +
+Retrieval Diagnostics
 ```
 
 ---
 
 # Technology Stack
 
-### Application
+## Application
 
 - Python
-- Python virtual environments
 - OpenAI Python SDK
 - Azure SDK for Python
+- Python virtual environments
 
-### Azure
+## Azure
 
 - Microsoft Foundry / Azure OpenAI
 - Azure AI Search
 - Azure OpenAI embedding deployment
 - Azure OpenAI chat deployment
 
-### Retrieval
+## Retrieval
 
 - Vector search
 - HNSW
@@ -152,8 +141,9 @@ Conversation Session
 - Reciprocal Rank Fusion (RRF)
 - Semantic ranking
 - Metadata filtering
+- ACL-based security filtering
 
-### Document Processing
+## Document Processing
 
 - PyPDF
 - Tiktoken
@@ -161,7 +151,7 @@ Conversation Session
 - Token-aware chunking
 - Page-aware PDF processing
 
-### Development
+## Development
 
 - Git
 - GitHub
@@ -187,7 +177,8 @@ multi-industry-rag/
 │   ├── test_rag.py
 │   ├── test_query_rewrite.py
 │   ├── test_chat.py
-│   └── test_session_summary.py
+│   ├── test_session_summary.py
+│   └── test_authorization_filter.py
 │
 ├── src/
 │   │
@@ -211,7 +202,8 @@ multi-industry-rag/
 │   ├── search/
 │   │   ├── __init__.py
 │   │   ├── index_schema.py
-│   │   └── uploader.py
+│   │   ├── uploader.py
+│   │   └── document_lifecycle.py
 │   │
 │   ├── retrieval/
 │   │   ├── __init__.py
@@ -221,6 +213,11 @@ multi-industry-rag/
 │   │   ├── __init__.py
 │   │   ├── session.py
 │   │   └── summarizer.py
+│   │
+│   ├── security/
+│   │   ├── __init__.py
+│   │   ├── authorization.py
+│   │   └── filters.py
 │   │
 │   ├── rag/
 │   │   ├── __init__.py
@@ -241,7 +238,7 @@ The application is intentionally separated into components so individual stages 
 
 ---
 
-# 1. Document Ingestion
+# Document Ingestion
 
 The ingestion pipeline prepares enterprise documents for retrieval.
 
@@ -254,100 +251,55 @@ Document
  ↓
 Chunk
  ↓
-Metadata
+Metadata + ACL
  ↓
 Embedding
  ↓
 Azure AI Search
 ```
 
-The orchestration for this process is handled by:
+The pipeline currently supports:
 
-```text
-src/ingestion/pipeline.py
-```
+- TXT documents
+- PDF documents
+- Page-aware PDF processing
+- Sentence-aware chunking
+- Token-aware chunking
+- Chunk overlap
+- Enterprise metadata
+- Document ACL metadata
+- Azure OpenAI embeddings
+- Azure AI Search indexing
 
-Individual modules remain responsible for specific operations such as loading, parsing, chunking and embedding.
-
----
-
-# 2. Multi-Format Document Processing
-
-The ingestion architecture currently supports:
-
-- `.txt`
-- `.pdf`
-
-TXT documents are read directly.
-
-PDF documents are processed page-by-page using PyPDF, allowing page information to be retained throughout the RAG pipeline.
-
-The parser architecture is extensible so additional formats such as DOCX, HTML, JSON and CSV can be introduced later.
+PDF page numbers are retained so retrieved information can later be traced back to the original source.
 
 ---
 
-# 3. Page-Aware PDF Processing
+# Chunking
 
-PDF pages are retained separately inside the document model.
+The project originally used character-based chunking and was later upgraded to sentence and token-aware chunking.
 
-This allows chunks to preserve:
-
-```text
-file_name
-page_number
-chunk_index
-```
-
-For example:
+The current strategy uses:
 
 ```text
-SOURCE: information-security-manual.pdf
-PAGE: Page 147
-CHUNK_ID: information-security-manual_pdf-381
+Sentence boundaries
+        +
+Token limits
+        +
+Sentence overlap
+        +
+PDF page boundaries
 ```
 
-This provides the foundation for page-level citations in generated answers.
-
-Scanned and complex layout-heavy PDFs will later be handled through Azure AI Document Intelligence.
-
----
-
-# 4. Token and Sentence-Aware Chunking
-
-The original implementation used character-based chunking.
-
-It has been upgraded to use:
-
-- sentence boundaries
-- token budgets
-- sentence overlap
-- page boundaries
-
-Instead of arbitrarily producing:
-
-```text
-"artificial intelligence frame"
-"l intelligence framework..."
-```
-
-the chunker attempts to retain complete sentences.
+This reduces arbitrary text splitting and improves the quality of the units passed to retrieval.
 
 Tiktoken is used to estimate chunk size using tokens rather than raw character counts.
 
-The current default strategy is approximately:
-
-```text
-300 token maximum chunk size
-1 sentence overlap
-```
-
-More advanced structure-aware chunking will be introduced for large legislation, policies, manuals and other structured enterprise documents.
-
 ---
 
-# 5. Enterprise Metadata
+# Multi-Industry Metadata
 
-Each indexed chunk can contain metadata such as:
+Chunks can contain business metadata such as:
 
 ```text
 industry
@@ -365,9 +317,9 @@ document_type: knowledge-article
 classification: internal
 ```
 
-This metadata allows retrieval to be constrained to relevant knowledge domains.
+This allows one RAG platform to support multiple enterprise knowledge domains.
 
-The same platform can therefore eventually support:
+Planned domains include:
 
 ```text
 Enterprise RAG
@@ -377,11 +329,9 @@ Enterprise RAG
 └── Government
 ```
 
-without creating three separate RAG applications.
-
 ---
 
-# 6. Embeddings
+# Azure OpenAI Embeddings
 
 Document chunks are converted into vector representations using an Azure OpenAI embedding deployment.
 
@@ -397,36 +347,36 @@ with:
 1536 dimensions
 ```
 
-The same embedding process is used for user search queries so document and query vectors can be compared.
+User queries are embedded using the same deployment so semantic similarity can be calculated during vector retrieval.
 
 ---
 
-# 7. Azure AI Search Index
+# Azure AI Search
 
-Azure AI Search stores both document content and vector representations.
+Azure AI Search stores searchable text, metadata, ACL information, and embeddings.
 
-Current index fields include:
+Current index information includes:
 
 | Field | Purpose |
 |---|---|
 | `chunk_id` | Unique chunk identifier |
-| `content` | Searchable document content |
-| `file_name` | Original source document |
-| `chunk_index` | Position of the chunk |
+| `content` | Searchable chunk text |
+| `file_name` | Original source |
+| `chunk_index` | Chunk position |
 | `page_number` | Original PDF page |
-| `industry` | Industry/domain |
+| `industry` | Knowledge domain |
 | `department` | Business department |
 | `document_type` | Document category |
 | `classification` | Information classification |
+| `allowed_groups` | Groups permitted to access the chunk |
+| `allowed_roles` | Roles permitted to access the chunk |
 | `embedding` | Vector representation |
-
-The index is configured for vector retrieval and semantic ranking.
 
 ---
 
-# 8. Retrieval Strategies
+# Retrieval
 
-Three retrieval strategies have been implemented and tested independently.
+Three retrieval strategies have been implemented.
 
 ## Vector Search
 
@@ -440,8 +390,6 @@ Vector Similarity
 Relevant Chunks
 ```
 
-This retrieves text based on semantic similarity.
-
 ## Hybrid Search
 
 ```text
@@ -453,8 +401,6 @@ Vector Search
        ↓
 Combined Ranking
 ```
-
-Hybrid search combines lexical matching with semantic vector similarity.
 
 ## Semantic Hybrid Search
 
@@ -470,39 +416,37 @@ Semantic Reranking
 Final Results
 ```
 
-Semantic ranking adds an additional relevance-ranking stage over the hybrid candidate results.
+The production-oriented RAG path currently uses semantic hybrid retrieval.
 
 ---
 
-# 9. Grounded RAG Generation
+# Grounded Generation
 
-Retrieved chunks are passed through a context builder before being provided to the Azure OpenAI chat model.
+Retrieved chunks are converted into grounding context before being passed to the Azure OpenAI chat model.
 
 ```text
 Question
    ↓
 Retrieval
    ↓
-Relevant Chunks
+Relevant Authorised Chunks
    ↓
 Context Builder
    ↓
-Grounded Prompt
-   ↓
 Azure OpenAI
    ↓
-Answer
+Grounded Answer
 ```
 
-The model is instructed to use the retrieved knowledge-base context for factual claims rather than relying on outside knowledge.
+The model is instructed to use retrieved knowledge-base content for factual claims.
 
-If retrieval returns no authorised information, the pipeline stops and returns an insufficient-information response instead of asking the model to invent an answer.
+If no authorised information is retrieved, generation is stopped and the application returns an insufficient-information response.
 
 ---
 
-# 10. Source Citations
+# Source Traceability
 
-Retrieved chunks retain structured source information:
+Retrieved chunks retain:
 
 ```text
 file_name
@@ -510,21 +454,21 @@ page_number
 chunk_id
 ```
 
-This allows answers to reference evidence such as:
+This provides the foundation for citations such as:
 
 ```text
 [SOURCE: policy.pdf, Page 17]
 ```
 
-Structured source information is also returned separately from the generated answer for future UI and API use.
+Source metadata is also returned separately from the generated response so a future API or web interface can display citations independently.
 
 ---
 
-# 11. Conversational RAG
+# Conversational RAG
 
-The project now supports multi-turn questions.
+The system supports multi-turn questions.
 
-For example:
+Example:
 
 ```text
 User:
@@ -537,7 +481,7 @@ User:
 Why is it useful?
 ```
 
-The second question does not contain enough context by itself.
+The second question is ambiguous by itself.
 
 The system therefore performs:
 
@@ -557,143 +501,441 @@ For example:
 Why is it useful?
 ```
 
-may become:
+can become:
 
 ```text
 Why is retrieval augmented generation useful?
 ```
 
-The rewritten query is then used for retrieval.
+The rewritten query is then sent through the retrieval pipeline.
 
 ---
 
-# 12. Conversation Sessions
+# Conversation Management
 
-Each conversation is represented by a `ConversationSession`.
-
-Sessions currently contain:
+Each conversation has a unique session.
 
 ```text
-session_id
-conversation history
-conversation summary
+ConversationSession
+│
+├── session_id
+├── recent history
+└── conversation summary
 ```
 
-A unique session ID allows conversations to remain logically separated.
+Conversation history is bounded to prevent unlimited growth.
 
-The current implementation stores sessions in application memory.
-
-A distributed store such as Redis or a database can replace this when the application is deployed across multiple instances.
-
----
-
-# 13. Conversation Memory Management
-
-Sending unlimited conversation history to an LLM would continually increase:
-
-- token usage
-- latency
-- cost
-- irrelevant context
-
-The application therefore maintains a bounded recent history.
-
-Older messages can be summarised into a compact conversation summary.
+Older messages can be summarised:
 
 ```text
 Older Messages
       ↓
 Summarisation
       ↓
-Conversation Summary
+Compact Summary
       +
 Recent Messages
       ↓
-Future RAG Requests
+Future Requests
 ```
 
-This preserves useful conversational context without allowing raw history to grow indefinitely.
+This reduces token usage while retaining useful conversational context.
+
+Conversation history helps understand the dialogue but is **not treated as authoritative enterprise knowledge**.
 
 ---
 
-# 14. Conversation-Aware Generation
+# Retrieval Diagnostics
 
-Conversation history is used in two places:
-
-```text
-Conversation History
-      │
-      ├───────────────┐
-      ▼               ▼
-Query Rewriting   Answer Generation
-      │               ▲
-      ▼               │
-Retrieval ────────────┘
-```
-
-The history helps understand conversational intent.
-
-However, conversation history is not treated as authoritative enterprise evidence. Factual answers must still be grounded in retrieved knowledge-base content.
-
----
-
-# 15. Retrieval Diagnostics
-
-The RAG orchestrator exposes diagnostic information alongside responses.
-
-Current diagnostics include:
+The RAG pipeline returns diagnostic information including:
 
 ```text
-session_id
-original question
+session ID
 rewritten search query
 retrieved chunk IDs
-source documents
+source files
 page numbers
 search scores
 semantic reranker scores
 ```
 
-This helps isolate failures.
+This allows incorrect answers to be investigated systematically.
+
+```text
+Bad Answer
+    ↓
+Query rewriting problem?
+    ↓
+Retrieval problem?
+    ↓
+Security filtering problem?
+    ↓
+Ranking problem?
+    ↓
+Context problem?
+    ↓
+Generation problem?
+```
+
+This is one of the reasons the application is divided into separate layers.
+
+---
+
+# Enterprise Authorization
+
+Commit 9 introduces the first enterprise security layer.
+
+The application now represents user permissions using an:
+
+```text
+AuthorizationContext
+```
+
+Example:
+
+```text
+User
+│
+├── User ID
+├── Roles
+├── Groups
+├── Allowed Industries
+├── Allowed Departments
+└── Maximum Classification
+```
+
+This separates two important security concepts:
+
+```text
+Authentication
+=
+Who are you?
+
+Authorization
+=
+What are you allowed to access?
+```
+
+Microsoft Entra ID authentication will be introduced in a later phase.
+
+---
+
+# Document-Level Access Control
+
+Chunks can now contain Access Control List (ACL) metadata:
+
+```text
+allowed_groups
+allowed_roles
+```
+
+Example:
+
+```text
+Document:
+IT Support Knowledge Article
+
+allowed_groups:
+- service-desk
+- it-admins
+
+allowed_roles:
+- employee
+```
+
+An authorised user may have:
+
+```text
+groups:
+- service-desk
+
+roles:
+- employee
+```
+
+while an unauthorised user might have:
+
+```text
+groups:
+- finance-team
+
+roles:
+- employee
+```
+
+The second user is prevented from retrieving the protected document.
+
+---
+
+# Security-Filtered Retrieval
+
+Authorization is enforced during retrieval rather than after generation.
+
+```text
+User
+   ↓
+AuthorizationContext
+   ↓
+Security Filter Builder
+   ↓
+Azure AI Search
+   ↓
+Authorised Chunks Only
+   ↓
+Context Builder
+   ↓
+LLM
+```
+
+This is an important security principle.
+
+The system does **not**:
+
+```text
+Retrieve restricted information
+        ↓
+Send it to the LLM
+        ↓
+Ask the LLM not to reveal it
+```
+
+Instead:
+
+```text
+Authorization
+        ↓
+Search filtering
+        ↓
+Restricted chunks excluded
+        ↓
+LLM never receives them
+```
+
+The authorization test currently verifies that the same question can produce different retrieval results for users with different permissions.
+
+---
+
+# Classification Enforcement
+
+The authorization model includes a maximum classification level.
+
+Current hierarchy:
+
+```text
+public
+   ↓
+internal
+   ↓
+confidential
+   ↓
+restricted
+```
+
+For example, a user with:
+
+```text
+max_classification = internal
+```
+
+can access:
+
+```text
+public
+internal
+```
+
+but not:
+
+```text
+confidential
+restricted
+```
+
+Classification filtering is combined with industry, department, group, and role restrictions.
+
+---
+
+# Secure Re-Ingestion and Document Lifecycle
+
+A production search index must handle documents that change over time.
 
 For example:
 
 ```text
-Incorrect Answer
-      ↓
-Was the rewritten query wrong?
-      ↓
-Was the wrong document retrieved?
-      ↓
-Was ranking poor?
-      ↓
-Was good context retrieved but generation wrong?
+Old version:
+policy.pdf
+→ 20 chunks
+
+New version:
+policy.pdf
+→ 12 chunks
 ```
 
-This separation is important for debugging production RAG systems.
+Simply uploading the new 12 chunks can leave obsolete chunks from the previous version in the index.
+
+This can cause:
+
+- stale information
+- duplicate knowledge
+- outdated policies
+- obsolete ACLs
+- restricted information remaining searchable
+
+The ingestion pipeline therefore performs document cleanup before re-indexing:
+
+```text
+Re-ingest Document
+       ↓
+Find existing chunks
+       ↓
+Delete previous chunks
+       ↓
+Parse latest document
+       ↓
+Create fresh chunks
+       ↓
+Apply current metadata + ACLs
+       ↓
+Generate embeddings
+       ↓
+Upload fresh chunks
+```
+
+This ensures the search index represents the current document and current security configuration.
+
+---
+
+# Security Architecture So Far
+
+```text
+                 CURRENT DEVELOPMENT MODEL
+
+Simulated User
+      │
+      ▼
+AuthorizationContext
+      │
+      ├── roles
+      ├── groups
+      ├── industries
+      ├── departments
+      └── classification
+      │
+      ▼
+Security Filter Builder
+      │
+      ▼
+Azure AI Search
+      │
+      ▼
+Authorised Chunks
+      │
+      ▼
+RAG Pipeline
+
+
+                   FUTURE PRODUCTION MODEL
+
+Microsoft Entra ID
+      │
+      ▼
+Authenticated Identity
+      │
+      ▼
+Enterprise Groups / Roles
+      │
+      ▼
+AuthorizationContext
+      │
+      ▼
+Security-Filtered Retrieval
+      │
+      ▼
+Azure AI Search
+      │
+      ▼
+Authorised Context Only
+      │
+      ▼
+Azure OpenAI
+```
+
+---
+
+# Security Testing
+
+The current test suite simulates users with different permissions.
+
+### Authorised User
+
+```text
+Industry: IT Support
+Department: Service Desk
+Group: service-desk
+Role: employee
+Classification: internal
+```
+
+Expected:
+
+```text
+Protected IT document
+        ↓
+Retrieved
+        ↓
+Grounded answer
+```
+
+### Unauthorised User
+
+```text
+Industry: IT Support
+Department: Service Desk
+Group: finance-team
+Role: employee
+Classification: internal
+```
+
+Expected:
+
+```text
+Protected IT document
+        ↓
+Rejected by ACL
+        ↓
+No authorised chunks
+        ↓
+No grounded answer generated
+```
+
+This verifies that authorization is enforced at retrieval time.
 
 ---
 
 # Key Learnings
 
-Building the system from individual components has demonstrated several important concepts:
+Building the platform incrementally has demonstrated:
 
-- RAG consists of separate ingestion, retrieval, augmentation and generation stages.
-- Embeddings represent semantic meaning and enable vector retrieval.
-- Query and document embeddings must use compatible dimensions.
+- RAG consists of independent ingestion, retrieval, augmentation, and generation stages.
+- Embeddings enable semantic vector retrieval.
 - Chunking strategy directly affects retrieval quality.
-- Token-aware chunking is more appropriate for LLM systems than arbitrary character boundaries.
-- Page metadata is important for traceability and citations.
-- Azure AI Search document keys have formatting restrictions.
-- Vector retrieval alone is not always sufficient.
-- Hybrid retrieval combines lexical and semantic matching.
-- Semantic ranking is a reranking stage rather than another embedding search.
-- Metadata filters allow knowledge domains to be separated.
+- Token-aware chunking is more appropriate for LLM workloads than arbitrary character boundaries.
+- Page metadata enables traceable citations.
+- Hybrid search combines lexical and semantic retrieval.
+- Semantic ranking reranks retrieved candidates.
+- Metadata enables knowledge-domain separation.
 - Conversation memory and enterprise knowledge are different concepts.
-- Query rewriting helps conversational questions become useful retrieval queries.
+- Query rewriting improves multi-turn retrieval.
 - Conversation history should be bounded or summarised.
-- Retrieval diagnostics make incorrect RAG responses much easier to investigate.
-- Components should remain separated so failures can be isolated instead of treating the entire system as a single "AI" component.
+- Retrieval diagnostics are essential for debugging RAG failures.
+- Authentication and authorization solve different problems.
+- Client-provided filters should not determine user permissions.
+- Authorization should be enforced before restricted content reaches the LLM.
+- ACL metadata can provide document-level security trimming.
+- Classification can provide an additional authorization boundary.
+- Re-ingestion must remove stale chunks rather than only uploading new ones.
+- Stale search data can become both a data-quality and security problem.
+- Separating application layers makes production failures easier to diagnose.
 
 ---
 
@@ -704,50 +946,52 @@ Building the system from individual components has demonstrated several importan
 - [x] Python project foundation
 - [x] Environment-based configuration
 - [x] Application logging
-- [x] Document models
 - [x] TXT ingestion
 - [x] PDF parsing
 - [x] Page-aware PDF processing
 - [x] Sentence-aware chunking
 - [x] Token-aware chunking
 - [x] Chunk overlap
-- [x] Enterprise metadata
-- [x] Multi-industry ingestion architecture
+- [x] Multi-industry metadata
 - [x] Azure OpenAI embeddings
-- [x] Azure AI Search vector index
-- [x] HNSW vector search
-- [x] Metadata-filtered retrieval
+- [x] Azure AI Search index
+- [x] HNSW vector retrieval
+- [x] Metadata filtering
 - [x] Hybrid search
 - [x] Semantic ranking
-- [x] RAG orchestration
-- [x] Grounded answer generation
+- [x] Grounded RAG generation
 - [x] Source metadata and citations
 - [x] Query rewriting
 - [x] Multi-turn conversational RAG
 - [x] Conversation sessions
-- [x] Conversation history management
 - [x] Conversation summarisation
-- [x] Conversation-aware generation
 - [x] Retrieval diagnostics
+- [x] Authorization context
+- [x] Role and group ACL metadata
+- [x] Classification-based authorization
+- [x] Security filter generation
+- [x] Security-filtered Azure AI Search retrieval
+- [x] Positive authorization testing
+- [x] Negative authorization testing
+- [x] Secure document re-ingestion
+- [x] Stale chunk cleanup
 
 ## Planned
 
-- [ ] Microsoft Entra ID integration
-- [ ] User and group authorization context
-- [ ] Document-level access control
-- [ ] Security-filtered retrieval
-- [ ] Classification enforcement
+- [ ] Microsoft Entra ID authentication
+- [ ] Real Entra group/role mapping
+- [ ] Managed identities
+- [ ] Azure Key Vault
 - [ ] Prompt injection defenses
 - [ ] Input/output guardrails
-- [ ] Azure AI Content Safety integration
+- [ ] Azure AI Content Safety
 - [ ] Real multi-industry document corpus
 - [ ] Azure AI Document Intelligence
-- [ ] Structure-aware document chunking
+- [ ] Structure-aware chunking
 - [ ] RAG evaluation framework
 - [ ] Retrieval quality metrics
 - [ ] Groundedness evaluation
-- [ ] Observability and distributed tracing
-- [ ] OpenTelemetry
+- [ ] OpenTelemetry tracing
 - [ ] Application Insights
 - [ ] REST API
 - [ ] Web application
@@ -756,24 +1000,22 @@ Building the system from individual components has demonstrated several importan
 - [ ] Automated testing
 - [ ] CI/CD
 - [ ] DEV / TEST / PROD environments
-- [ ] Managed identities
-- [ ] Azure Key Vault
 - [ ] Private networking
 - [ ] Production deployment
 
 ---
 
-# Security Direction
+# Environment Configuration
 
-The current development environment uses local environment variables for Azure credentials.
+Application configuration is loaded from environment variables.
 
-Real secrets are stored in:
+Real credentials should be stored locally in:
 
 ```text
 .env
 ```
 
-and `.env` must not be committed to source control.
+and must not be committed.
 
 The repository contains:
 
@@ -781,55 +1023,49 @@ The repository contains:
 .env.example
 ```
 
-to document required configuration without exposing credentials.
+to document required variables without exposing secrets.
 
-The production architecture will progressively replace development credentials with:
+The current development implementation uses API keys where required.
+
+Later production stages will progressively replace key-based authentication with:
 
 ```text
 Microsoft Entra ID
-        ↓
+        +
 Managed Identity
-        ↓
+        +
 Azure RBAC
-        ↓
-Application Authorization
-        ↓
-Document-Level Access Control
-        ↓
-Security-Filtered Retrieval
+        +
+Azure Key Vault
 ```
-
-Additional guardrails, content safety, secret management and network isolation will be added as the architecture progresses.
 
 ---
 
 # Real-World Knowledge Corpus
 
-The project is designed to eventually ingest large public industry documents rather than relying only on artificial sample data.
+The platform is designed to eventually ingest large public documents rather than relying only on small artificial samples.
 
 Planned domains include:
 
 ### IT / Cyber Security
 
-Public cybersecurity standards, controls, manuals and operational guidance.
+Public cybersecurity standards, controls, manuals, and operational guidance.
 
 ### Financial Services
 
-Public financial regulation, legislation and operational-risk guidance.
+Public financial regulation, legislation, compliance material, and operational-risk guidance.
 
 ### Government
 
-Public legislation, policies, standards and administrative guidance.
+Public legislation, policy, standards, and administrative guidance.
 
-Large source documents will generally not be committed directly to this repository. The repository will instead document their official sources and provide ingestion instructions where appropriate.
-
-This keeps the repository focused on the RAG platform rather than storing large third-party document collections.
+Large third-party documents will generally not be committed directly to the repository. Official sources and ingestion instructions can instead be documented.
 
 ---
 
 # Git Development Milestones
 
-The project is intentionally being developed through capability-based commits.
+The project is being developed through capability-based commits.
 
 ```text
 Commit 1
@@ -856,61 +1092,70 @@ Token and sentence-aware chunking
 Commit 8
 Conversational RAG, session memory and retrieval diagnostics
 
-Next
-Enterprise identity and document-level authorization
-```
+Commit 9
+Enterprise authorization, document ACLs and secure re-ingestion
 
-This approach keeps architectural changes isolated and makes the development history useful for understanding how the system evolved.
+Next
+Microsoft Entra ID authentication and identity integration
+```
 
 ---
 
-# Current System
-
-The application now implements an end-to-end conversational RAG flow:
+# Current End-to-End Flow
 
 ```text
-                    USER
-                      │
-                      ▼
-              Conversation Session
-                      │
-                      ▼
-                Query Rewriting
-                      │
-                      ▼
-             Standalone Search Query
-                      │
-              ┌───────┴───────┐
-              ▼               ▼
-          Keyword          Vector
-           Search           Search
-              │               │
-              └───────┬───────┘
-                      ▼
-                     RRF
-                      │
-                      ▼
-              Semantic Ranking
-                      │
-                      ▼
-              Relevant Chunks
-                      │
-                      ▼
-               Context Builder
-                      │
-                      ▼
-                Azure OpenAI
-                      │
-                      ▼
-                Grounded Answer
-                      │
-             ┌────────┴────────┐
-             ▼                 ▼
-          Sources       Retrieval Trace
-             │
-             └────────┬────────┘
-                      ▼
-             Conversation Memory
+                         USER
+                           │
+                           ▼
+                 Authorization Context
+                           │
+                           ▼
+                  Conversation Session
+                           │
+                           ▼
+                    Query Rewriting
+                           │
+                           ▼
+                  Standalone Query
+                           │
+                           ▼
+                 Security Filter Builder
+                           │
+                           ▼
+                    Azure AI Search
+                           │
+                 ┌─────────┴─────────┐
+                 ▼                   ▼
+             Keyword              Vector
+              Search               Search
+                 │                   │
+                 └─────────┬─────────┘
+                           ▼
+                          RRF
+                           │
+                           ▼
+                  Semantic Reranking
+                           │
+                           ▼
+                   Authorised Chunks
+                           │
+                           ▼
+                    Context Builder
+                           │
+                           ▼
+                     Azure OpenAI
+                           │
+                           ▼
+                    Grounded Answer
+                           │
+                ┌──────────┴──────────┐
+                ▼                     ▼
+             Sources          Retrieval Diagnostics
+                           │
+                           ▼
+                  Conversation Memory
 ```
 
-The next development phase moves from **functional enterprise RAG** toward **secured enterprise RAG** by introducing identity, authorization context and document-level access controls.
+The project now has a functional end-to-end **security-aware conversational RAG pipeline**.
+
+The next phase will replace simulated user identities with real enterprise identity information using **Microsoft Entra ID**, bringing authentication and authorization together.

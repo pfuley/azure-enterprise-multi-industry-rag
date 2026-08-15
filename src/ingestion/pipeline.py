@@ -7,6 +7,9 @@ from src.ingestion.loader import load_text_file
 from src.ingestion.metadata import enrich_chunk_metadata
 from src.ingestion.parser import parse_document
 from src.search.uploader import upload_chunks
+from src.search.document_lifecycle import (
+    delete_existing_document_chunks,
+)
 
 
 def ingest_document(
@@ -36,6 +39,9 @@ def ingest_document(
             f"Unsupported file type: {extension}"
         )
 
+    delete_existing_document_chunks(
+        document.file_name
+    )
     chunks = chunk_document(
         document=document,
         chunk_size=chunk_size,
@@ -50,6 +56,9 @@ def ingest_document(
             document_type=config.document_type,
             classification=config.classification,
         )
+
+        chunk.allowed_groups = config.allowed_groups.copy()
+        chunk.allowed_roles = config.allowed_roles.copy()
 
         embed_chunk(chunk)
 
