@@ -319,6 +319,9 @@ Building the pipeline from scratch has demonstrated several important RAG concep
 - [x] Metadata-filtered retrieval
 - [x] Hybrid retrieval
 - [x] Semantic ranking
+- [x] Query rewriting
+- [x] Conversational retrieval
+- [x] Multi-turn query context
 
 ### Next
 

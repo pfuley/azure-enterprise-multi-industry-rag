@@ -6,6 +6,7 @@ from src.core.config import (
     AZURE_OPENAI_ENDPOINT,
 )
 from src.rag.context_builder import build_context
+from src.rag.query_rewriter import rewrite_query
 from src.retrieval.vector_search import semantic_hybrid_search
 
 
@@ -28,6 +29,7 @@ def answer_question(
     department: str | None = None,
     classification: str | None = None,
     top_k: int = 3,
+    conversation_history: list[dict] | None = None,
 ) -> dict:
     if not question.strip():
         raise ValueError("Question cannot be empty")
@@ -37,8 +39,13 @@ def answer_question(
             "AZURE_OPENAI_CHAT_DEPLOYMENT is not configured"
         )
 
+    search_query = rewrite_query(
+        question=question,
+        conversation_history=conversation_history,
+    )
+
     search_results = semantic_hybrid_search(
-        query=question,
+        query=search_query,
         top_k=top_k,
         industry=industry,
         department=department,
@@ -52,6 +59,7 @@ def answer_question(
                 "authorised knowledge base to answer this question."
             ),
             "sources": [],
+            "search_query": search_query,
         }
 
     context = build_context(search_results)
@@ -70,25 +78,35 @@ Rules:
 - Do not invent information.
 - If the supplied context does not contain enough information, say so.
 - Keep the answer concise and factual.
-- Cite supporting sources using [SOURCE: filename].
+- Cite supporting sources using [SOURCE: filename, Page X] when page information is available.
+- If page information is unavailable, cite using [SOURCE: filename].
 """.strip(),
         input=f"""
 USER QUESTION:
 {question}
+
+SEARCH QUERY:
+{search_query}
 
 KNOWLEDGE BASE CONTEXT:
 {context}
 """.strip(),
     )
 
-    sources = list(
-        dict.fromkeys(
-            result["file_name"]
-            for result in search_results
-        )
-    )
+    sources = []
+
+    for result in search_results:
+        source = {
+            "file_name": result["file_name"],
+            "page_number": result.get("page_number"),
+            "chunk_id": result["chunk_id"],
+        }
+
+        if source not in sources:
+            sources.append(source)
 
     return {
         "answer": response.output_text,
         "sources": sources,
+        "search_query": search_query,
     }
