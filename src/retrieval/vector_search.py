@@ -164,3 +164,64 @@ def hybrid_search(
         }
         for result in results
     ]
+
+def semantic_hybrid_search(
+    query: str,
+    top_k: int = 3,
+    industry: str | None = None,
+    department: str | None = None,
+    classification: str | None = None,
+) -> list[dict]:
+    if not query.strip():
+        raise ValueError("Search query cannot be empty")
+
+    query_embedding = generate_embedding(query)
+
+    vector_query = VectorizedQuery(
+        vector=query_embedding,
+        k_nearest_neighbors=50,
+        fields="embedding",
+    )
+
+    search_filter = build_filter(
+        industry=industry,
+        department=department,
+        classification=classification,
+    )
+
+    client = create_search_client()
+
+    results = client.search(
+        search_text=query,
+        vector_queries=[vector_query],
+        filter=search_filter,
+        query_type="semantic",
+        semantic_configuration_name="semantic-config",
+        select=[
+            "chunk_id",
+            "content",
+            "file_name",
+            "chunk_index",
+            "industry",
+            "department",
+            "document_type",
+            "classification",
+        ],
+        top=top_k,
+    )
+
+    return [
+        {
+            "chunk_id": result["chunk_id"],
+            "content": result["content"],
+            "file_name": result["file_name"],
+            "chunk_index": result["chunk_index"],
+            "industry": result["industry"],
+            "department": result["department"],
+            "document_type": result["document_type"],
+            "classification": result["classification"],
+            "score": result["@search.score"],
+            "reranker_score": result.get("@search.reranker_score"),
+        }
+        for result in results
+    ]
