@@ -3,3 +3,6 @@ openai
 azure-search-documents
 pypdf
 tiktoken
+PyJWT[crypto]
+requests
+msal

@@ -975,6 +975,11 @@ Building the platform incrementally has demonstrated:
 - [x] Negative authorization testing
 - [x] Secure document re-ingestion
 - [x] Stale chunk cleanup
+- [x] Microsoft Entra ID authentication
+- [x] Access-token validation
+- [x] Entra app roles
+- [x] Identity-to-authorization mapping
+- [x] Real authenticated RAG access
 
 ## Planned
 
