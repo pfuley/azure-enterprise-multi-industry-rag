@@ -322,10 +322,10 @@ Building the pipeline from scratch has demonstrated several important RAG concep
 
 ### Next
 
-- [ ] RAG orchestration
-- [ ] Azure OpenAI answer generation
-- [ ] Grounded responses
-- [ ] Source citations
+- [x] RAG orchestration
+- [x] Azure OpenAI answer generation
+- [x] Grounded responses
+- [x] Basic source citations
 - [ ] Real multi-industry document sets
 - [ ] Improved document parsing
 - [ ] Token/structure-aware chunking
