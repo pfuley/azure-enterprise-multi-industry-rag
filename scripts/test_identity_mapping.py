@@ -9,7 +9,7 @@ identity = UserIdentity(
     display_name="Test User",
     email="test@example.com",
     roles=[
-        "employee",
+        "RAG.Employee",
     ],
     groups=[
         "service-desk",
@@ -53,4 +53,8 @@ print(
 print(
     "Maximum Classification:",
     authorization.max_classification,
+)
+print(
+    "Internal Roles:",
+    authorization.roles,
 )

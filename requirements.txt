@@ -6,3 +6,7 @@ tiktoken
 PyJWT[crypto]
 requests
 msal
+fastapi
+uvicorn[standard]
+azure-cosmos
+azure-identity

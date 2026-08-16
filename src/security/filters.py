@@ -9,102 +9,78 @@ CLASSIFICATION_LEVELS = {
 }
 
 
-def escape_odata_value(value: str) -> str:
-    return value.replace("'", "''")
+def escape_odata_value(
+    value: str,
+) -> str:
+    return value.replace(
+        "'",
+        "''",
+    )
 
 
 def build_authorization_filter(
     auth: AuthorizationContext,
 ) -> str:
+
     filters = []
 
     # -----------------------------------------
-    # Industry permissions
+    # 1. Industry access
     # -----------------------------------------
 
     if auth.allowed_industries:
+
         industries = ",".join(
-            escape_odata_value(value)
-            for value in auth.allowed_industries
+            escape_odata_value(
+                value
+            )
+            for value
+            in auth.allowed_industries
         )
 
         filters.append(
-            f"search.in(industry, '{industries}', ',')"
+            (
+                "search.in("
+                f"industry, '{industries}', ','"
+                ")"
+            )
         )
 
     # -----------------------------------------
-    # Department permissions
+    # 2. Department access
     # -----------------------------------------
 
     if auth.allowed_departments:
+
         departments = ",".join(
-            escape_odata_value(value)
-            for value in auth.allowed_departments
+            escape_odata_value(
+                value
+            )
+            for value
+            in auth.allowed_departments
         )
 
         filters.append(
-            f"search.in(department, '{departments}', ',')"
+            (
+                "search.in("
+                f"department, '{departments}', ','"
+                ")"
+            )
         )
 
     # -----------------------------------------
-    # Group ACLs
+    # 3. Classification access
     # -----------------------------------------
 
-    if auth.groups:
-        groups = ",".join(
-            escape_odata_value(value)
-            for value in auth.groups
+    max_level = (
+        CLASSIFICATION_LEVELS.get(
+            auth.max_classification
         )
-
-        filters.append(
-            "("
-            "not allowed_groups/any() "
-            "or "
-            "allowed_groups/any("
-            f"g: search.in(g, '{groups}', ',')"
-            ")"
-            ")"
-        )
-    else:
-        filters.append(
-            "not allowed_groups/any()"
-        )   
-
-    # -----------------------------------------
-    # Role ACLs
-    # -----------------------------------------
-
-    if auth.roles:
-        roles = ",".join(
-            escape_odata_value(value)
-            for value in auth.roles
-        )
-
-        filters.append(
-            "("
-            "not allowed_roles/any() "
-            "or "
-            "allowed_roles/any("
-            f"r: search.in(r, '{roles}', ',')"
-            ")"
-            ")"
-        )
-    else:
-        filters.append(
-            "not allowed_roles/any()"
-        )
-
-    # -----------------------------------------
-    # Classification access
-    # -----------------------------------------
-
-    max_level = CLASSIFICATION_LEVELS.get(
-        auth.max_classification
     )
 
     if max_level is None:
         raise ValueError(
-            f"Unknown classification: "
+            "Unknown classification: "
             f"{auth.max_classification}"
         )
 
@@ -120,11 +96,108 @@ def build_authorization_filter(
     )
 
     filters.append(
-        f"search.in(classification, "
-        f"'{classifications}', ',')"
+        (
+            "search.in("
+            "classification, "
+            f"'{classifications}', ','"
+            ")"
+        )
     )
 
-    if not filters:
-        return ""
+    # -----------------------------------------
+    # 4. Build document ACL conditions
+    #
+    # Access is granted when:
+    #
+    # - document has no group AND no role ACL
+    #
+    # OR
+    #
+    # - user's group matches allowed_groups
+    #
+    # OR
+    #
+    # - user's internal role matches
+    #   allowed_roles
+    #
+    # This means a user does NOT need to match
+    # both group and role simultaneously.
+    # -----------------------------------------
 
-    return " and ".join(filters)
+    acl_conditions = [
+        (
+            "("
+            "not allowed_groups/any() "
+            "and "
+            "not allowed_roles/any()"
+            ")"
+        )
+    ]
+
+    # -----------------------------------------
+    # Group ACL
+    # -----------------------------------------
+
+    if auth.groups:
+
+        groups = ",".join(
+            escape_odata_value(
+                value
+            )
+            for value
+            in auth.groups
+        )
+
+        acl_conditions.append(
+            (
+                "allowed_groups/any("
+                f"g: search.in(g, '{groups}', ',')"
+                ")"
+            )
+        )
+
+    # -----------------------------------------
+    # Role ACL
+    # -----------------------------------------
+
+    if auth.roles:
+
+        roles = ",".join(
+            escape_odata_value(
+                value
+            )
+            for value
+            in auth.roles
+        )
+
+        acl_conditions.append(
+            (
+                "allowed_roles/any("
+                f"r: search.in(r, '{roles}', ',')"
+                ")"
+            )
+        )
+
+    # -----------------------------------------
+    # Combine ACL conditions using OR
+    # -----------------------------------------
+
+    acl_filter = (
+        "("
+        + " or ".join(
+            acl_conditions
+        )
+        + ")"
+    )
+
+    filters.append(
+        acl_filter
+    )
+
+    # -----------------------------------------
+    # 5. Combine all authorization controls
+    # -----------------------------------------
+
+    return " and ".join(
+        filters
+    )

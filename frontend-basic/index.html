@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Enterprise RAG Assistant</title>
+
+    <link
+        rel="stylesheet"
+        href="styles.css"
+    >
+</head>
+
+<body>
+
+    <div class="app">
+
+        <header class="header">
+            <div>
+                <h1>Enterprise RAG Assistant</h1>
+
+                <p>
+                    Secure enterprise knowledge assistant
+                </p>
+            </div>
+
+            <button
+                id="new-chat-button"
+                class="secondary-button"
+            >
+                New Chat
+            </button>
+        </header>
+
+
+        <main
+            id="chat-container"
+            class="chat-container"
+        >
+
+            <div class="welcome-message">
+
+                <h2>
+                    How can I help?
+                </h2>
+
+                <p>
+                    Ask a question about the authorised
+                    enterprise knowledge base.
+                </p>
+
+            </div>
+
+        </main>
+
+
+        <div
+            id="error-message"
+            class="error-message hidden"
+        ></div>
+
+
+        <form
+            id="chat-form"
+            class="chat-form"
+        >
+
+            <textarea
+                id="question-input"
+                placeholder="Ask a question..."
+                rows="1"
+                maxlength="4000"
+                required
+            ></textarea>
+
+            <button
+                id="send-button"
+                type="submit"
+            >
+                Send
+            </button>
+
+        </form>
+
+    </div>
+
+
+    <script src="app.js"></script>
+
+</body>
+</html>

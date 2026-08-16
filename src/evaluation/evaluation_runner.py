@@ -14,6 +14,7 @@ from src.rag.context_builder import (
     build_context,
 )
 from src.rag.orchestrator import (
+    answer_question,
     generate_answer_from_results,
 )
 from src.retrieval.vector_search import (
@@ -32,12 +33,20 @@ def evaluate_case(
     """
     Evaluate one RAG test case.
 
-    The same retrieved chunks are used for:
-    - source evaluation
-    - answer generation
-    - groundedness evaluation
+    Supports:
+    - retrieval evaluation
+    - concept coverage
+    - groundedness
+    - answer relevance
+    - authorization/refusal testing
+    - prompt-injection testing
 
-    Security and guardrail cases are also evaluated.
+    Normal evaluation cases reuse the exact retrieved
+    chunks for generation and groundedness evaluation.
+
+    Direct prompt-injection cases run through the full
+    production answer_question() path so the user
+    Prompt Shield is tested correctly.
     """
 
     # -----------------------------------------
@@ -65,24 +74,84 @@ def evaluate_case(
         False,
     )
 
-    # -----------------------------------------
-    # 2. Run retrieval once
-    # -----------------------------------------
+    auth_profile = test_case.get(
+        "auth_profile",
+        "authorized",
+    )
 
-    search_results = semantic_hybrid_search(
-        query=question,
-        top_k=top_k,
-        auth=auth,
+    is_security_case = (
+        expect_refusal
+        or expect_guardrail_block
     )
 
     # -----------------------------------------
-    # 3. Collect unique retrieved sources
+    # 2. Select authorization profile
+    #
+    # Normal tests use the AuthorizationContext
+    # supplied by run_evaluation.py.
+    #
+    # Unauthorized tests deliberately create a
+    # user who cannot access the IT knowledge
+    # base used by the evaluation dataset.
+    # -----------------------------------------
+
+    case_auth = auth
+
+    if auth_profile == "unauthorized":
+
+        case_auth = AuthorizationContext(
+            user_id=(
+                "unauthorized-evaluation-user"
+            ),
+            roles=[
+                "employee",
+            ],
+            groups=[
+                "finance-team",
+            ],
+            allowed_industries=[
+                "financial-services",
+            ],
+            allowed_departments=[
+                "finance",
+            ],
+            max_classification="internal",
+        )
+
+    # -----------------------------------------
+    # 3. Retrieval
+    #
+    # Direct prompt-injection tests should be
+    # blocked before retrieval occurs.
+    #
+    # Therefore we do not manually retrieve
+    # anything for those tests.
+    # -----------------------------------------
+
+    if expect_guardrail_block:
+
+        search_results = []
+
+    else:
+
+        search_results = (
+            semantic_hybrid_search(
+                query=question,
+                top_k=top_k,
+                auth=case_auth,
+            )
+        )
+
+    # -----------------------------------------
+    # 4. Collect retrieved source names
     # -----------------------------------------
 
     retrieved_sources = [
         result["file_name"]
         for result in search_results
     ]
+
+    # Remove duplicates while preserving order.
 
     retrieved_sources = list(
         dict.fromkeys(
@@ -91,48 +160,84 @@ def evaluate_case(
     )
 
     # -----------------------------------------
-    # 4. Evaluate expected source retrieval
+    # 5. Evaluate expected source retrieval
     #
-    # Negative/security cases may not require
-    # an expected source.
+    # Security cases may intentionally have no
+    # expected source.
     # -----------------------------------------
 
     if expected_source:
+
         source_found = (
             expected_source
             in retrieved_sources
         )
+
     else:
+
         source_found = None
 
     # -----------------------------------------
-    # 5. Build exact retrieved context
+    # 6. Build exact retrieved context
+    #
+    # Groundedness must be evaluated against
+    # the same evidence used for generation.
     # -----------------------------------------
 
-    context = build_context(
-        search_results
-    )
+    if search_results:
+
+        context = build_context(
+            search_results
+        )
+
+    else:
+
+        context = ""
 
     # -----------------------------------------
-    # 6. Generate answer using the exact
-    #    retrieved results
+    # 7. Generate answer
+    #
+    # Prompt-injection cases:
+    #     use answer_question()
+    #     → full production guardrail path
+    #
+    # Other cases:
+    #     use generate_answer_from_results()
+    #     → reuse exact retrieval results
     # -----------------------------------------
 
     guardrail_blocked = False
     guardrail_reason = None
 
     try:
-        rag_result = (
-            generate_answer_from_results(
+
+        if expect_guardrail_block:
+
+            rag_result = answer_question(
                 question=question,
-                search_query=question,
-                search_results=search_results,
+                auth=case_auth,
+                top_k=top_k,
             )
-        )
+
+        else:
+
+            rag_result = (
+                generate_answer_from_results(
+                    question=question,
+                    search_query=question,
+                    search_results=(
+                        search_results
+                    ),
+                )
+            )
 
     except GuardrailBlockedError as error:
+
         guardrail_blocked = True
-        guardrail_reason = str(error)
+
+        guardrail_reason = str(
+            error
+        )
 
         rag_result = {
             "answer": "",
@@ -146,7 +251,12 @@ def evaluate_case(
     ]
 
     # -----------------------------------------
-    # 7. Detect expected refusal
+    # 8. Detect controlled refusal
+    #
+    # Unauthorized retrieval should return no
+    # accessible chunks. The orchestrator then
+    # returns its controlled insufficient-
+    # information response.
     # -----------------------------------------
 
     refusal_detected = (
@@ -155,10 +265,11 @@ def evaluate_case(
     )
 
     # -----------------------------------------
-    # 8. Evaluate concept coverage
+    # 9. Evaluate concept coverage
     #
-    # Security tests may have no expected
-    # concepts.
+    # Security tests normally have no expected
+    # concepts, so they do not affect the
+    # concept metric in report.py.
     # -----------------------------------------
 
     concept_result = (
@@ -171,25 +282,34 @@ def evaluate_case(
     )
 
     # -----------------------------------------
-    # 9. Evaluate groundedness
+    # 10. Evaluate groundedness
     #
-    # Skip normal groundedness scoring when
-    # a guardrail intentionally blocked the
-    # request.
+    # Directly blocked requests have no answer
+    # to evaluate.
+    #
+    # Expected refusal cases are also security
+    # behaviour rather than normal answer-
+    # quality cases, so we do not call the LLM
+    # groundedness judge for them.
     # -----------------------------------------
 
-    if guardrail_blocked:
+    if (
+        guardrail_blocked
+        or expect_refusal
+    ):
+
         groundedness_result = {
             "grounded": False,
             "score": 0,
             "reason": (
                 "Groundedness was not evaluated "
-                "because the request was blocked "
-                "by a guardrail."
+                "because this is a security "
+                "refusal or guardrail test."
             ),
         }
 
     else:
+
         groundedness_result = (
             evaluate_groundedness(
                 question=question,
@@ -199,24 +319,29 @@ def evaluate_case(
         )
 
     # -----------------------------------------
-    # 10. Evaluate answer relevance
+    # 11. Evaluate answer relevance
     #
-    # Skip relevance when guardrail blocking
-    # is the expected behaviour.
+    # Security refusal/block cases are evaluated
+    # through security_passed instead.
     # -----------------------------------------
 
-    if guardrail_blocked:
+    if (
+        guardrail_blocked
+        or expect_refusal
+    ):
+
         relevance_result = {
             "relevant": False,
             "score": 0,
             "reason": (
                 "Relevance was not evaluated "
-                "because the request was blocked "
-                "by a guardrail."
+                "because this is a security "
+                "refusal or guardrail test."
             ),
         }
 
     else:
+
         relevance_result = (
             evaluate_answer_relevance(
                 question=question,
@@ -225,33 +350,31 @@ def evaluate_case(
         )
 
     # -----------------------------------------
-    # 11. Evaluate security expectations
+    # 12. Evaluate security expectations
     # -----------------------------------------
-
-    is_security_case = (
-        expect_refusal
-        or expect_guardrail_block
-    )
 
     security_passed = True
 
     if expect_refusal:
+
         security_passed = (
             security_passed
             and refusal_detected
         )
 
     if expect_guardrail_block:
+
         security_passed = (
             security_passed
             and guardrail_blocked
         )
 
     # -----------------------------------------
-    # 12. Return complete evaluation result
+    # 13. Return complete evaluation result
     # -----------------------------------------
 
     return {
+
         # -------------------------------------
         # Test metadata
         # -------------------------------------
@@ -267,6 +390,9 @@ def evaluate_case(
 
         "top_k":
             top_k,
+
+        "auth_profile":
+            auth_profile,
 
         # -------------------------------------
         # Retrieval evaluation
@@ -342,7 +468,7 @@ def evaluate_case(
             ],
 
         # -------------------------------------
-        # Security / refusal evaluation
+        # Security evaluation
         # -------------------------------------
 
         "is_security_case":

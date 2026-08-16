@@ -83,6 +83,9 @@ if "access_token" not in result:
 
 
 access_token = result["access_token"]
+print("\nACCESS TOKEN")
+print("=" * 60)
+print(access_token)
 
 # import jwt
 
